@@ -1,4 +1,4 @@
-// -----------------------------------------------------------------------
+﻿// -----------------------------------------------------------------------
 // <copyright file="InteractionStreamHandler.cs" company="Microsoft">
 // 	 
 //	 Copyright 2013 Microsoft Corporation 
@@ -113,6 +113,9 @@ namespace Microsoft.Samples.Kinect.Webserver.Sensor
         /// </summary>
         private static readonly Regex UserViewerResolutionRegex = new Regex(@"^(?i)(\d+)x(\d+)$");
 
+        /// <summary>
+        /// List of supported resolutions.
+        /// </summary>
         private static readonly Size[] UserViewerSupportedResolutions =
         {
             new Size(640, 480), new Size(320, 240), new Size(160, 120),
@@ -213,7 +216,7 @@ namespace Microsoft.Samples.Kinect.Webserver.Sensor
             this.userViewerDefaultUserColor = GetRgbaColorInt(UserViewerDefaultDefaultUserColor);
             this.userViewerUserColors[DefaultUserStateManager.TrackedStateName] = GetRgbaColorInt(UserViewerDefaultTrackedUserColor);
             this.userViewerUserColors[DefaultUserStateManager.EngagedStateName] = GetRgbaColorInt(UserViewerDefaultEngagedUserColor);
-            
+
             this.ownerContext = ownerContext;
             this.userStateManager.UserStateChanged += this.OnUserStateChanged;
 
@@ -222,8 +225,8 @@ namespace Microsoft.Samples.Kinect.Webserver.Sensor
         }
 
         /// <summary>
-        /// True if we should process interaction data fed into interaction stream and user state manager.
-        /// False otherwise.
+        /// Gets a value indicating whether we should process interaction data fed into
+        /// interaction stream and user state manager.
         /// </summary>
         private bool ShouldProcessInteractionData
         {
@@ -419,25 +422,33 @@ namespace Microsoft.Samples.Kinect.Webserver.Sensor
             {
             case ClientUriSubpath:
                 // Only support one client at any one time
+                WebSocketRpcChannel channelToClose = null;
                 if (this.clientRpcChannel != null)
                 {
                     if (this.clientRpcChannel.CheckConnectionStatus())
                     {
-                        KinectRequestHandler.CloseResponse(requestContext, HttpStatusCode.Conflict);
-                        return SharedConstants.EmptyCompletedTask;
+                        // New channel always trumps the old channel
+                        channelToClose = this.clientRpcChannel;
                     }
-
-                    this.clientRpcChannel = null;
                 }
 
                 WebSocketRpcChannel.TryOpenAsync(
                     requestContext,
                     channel =>
                         {
+                            if ((channelToClose != null) && (this.clientRpcChannel == channelToClose))
+                            {
+                                // Dispose of old channel if we get a new connection
+                                this.clientRpcChannel = null;
+                                channelToClose.Dispose();
+                            }
+
                             // Check again in case another request came in before connection was established
                             if (this.clientRpcChannel != null)
                             {
+                                // Dispose of new channel, because two channels tried to connect simultaneously
                                 channel.Dispose();
+                                return;
                             }
 
                             this.clientRpcChannel = channel;
